@@ -1,4 +1,4 @@
-namespace Consul.Tests
+namespace PetProjects.Framework.Consul.Tests
 {
     using Microsoft.VisualStudio.TestTools.UnitTesting;
 

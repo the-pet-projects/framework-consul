@@ -3,6 +3,7 @@
     using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Threading.Tasks;
+    using Microsoft.Extensions.Logging;
     using PetProjects.Framework.Consul.Watcher;
 
     public class ConsulKeyValueStore<T> : IKeyValueStore<T>
@@ -11,9 +12,9 @@
         protected readonly IStoreConfiguration StoreConfig;
         protected readonly IKeyValueWatcher Watcher;
         protected readonly IInitialKeyValuesProvider<T> Provider;
-        protected readonly ILog Log;
+        protected readonly ILogger Log;
 
-        public ConsulKeyValueStore(IStoreConfiguration storeConfig, IKeyValueWatcher watcher, IInitialKeyValuesProvider<T> provider, ILog log)
+        public ConsulKeyValueStore(IStoreConfiguration storeConfig, IKeyValueWatcher watcher, IInitialKeyValuesProvider<T> provider, ILogger log)
         {
             this.StoreConfig = storeConfig;
             this.Watcher = watcher;
@@ -61,7 +62,7 @@
                 }
                 catch (KvEndpointException ex)
                 {
-                    this.Log.Error("Key couldn't be loaded from consul and isn't being watched.", () => new { Exception = ex.ToString(), newKv.Key });
+                    this.Log.LogError(ex, "Key {key} couldn't be loaded from consul and isn't being watched.", newKv.Key);
                 }
             }
         }

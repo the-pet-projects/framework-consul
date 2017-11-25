@@ -5,30 +5,18 @@
     using System.Threading;
     using System.Threading.Tasks;
     using global::Consul;
-    using PetProjects.Framework.Consul;
+    using Microsoft.Extensions.Logging;
 
     public class ConsulKeyValueWatcher : IKeyValueWatcher
     {
         private readonly IKVEndpoint keyValueEndpoint;
         private readonly IWatcherConfiguration configuration;
-        private readonly ILog log;
+        private readonly ILogger log;
 
         private readonly CancellationTokenSource ct = new CancellationTokenSource();
         private readonly ConcurrentBag<Task> tasks = new ConcurrentBag<Task>();
 
-        public ConsulKeyValueWatcher(IKVEndpoint keyValueEndpoint) : this(keyValueEndpoint, new WatcherConfiguration(), new NullLog())
-        {
-        }
-
-        public ConsulKeyValueWatcher(IKVEndpoint keyValueEndpoint, ILog log) : this(keyValueEndpoint, new WatcherConfiguration(), log)
-        {
-        }
-
-        public ConsulKeyValueWatcher(IKVEndpoint keyValueEndpoint, IWatcherConfiguration configuration) : this(keyValueEndpoint, configuration, new NullLog())
-        {
-        }
-
-        public ConsulKeyValueWatcher(IKVEndpoint keyValueEndpoint, IWatcherConfiguration configuration, ILog log)
+        public ConsulKeyValueWatcher(IKVEndpoint keyValueEndpoint, IWatcherConfiguration configuration, ILogger log)
         {
             this.keyValueEndpoint = keyValueEndpoint;
             this.configuration = configuration;
@@ -53,7 +41,7 @@
 
         public void Dispose()
         {
-            this.log.Warning("Stopping consul key value watch tasks...");
+            this.log.LogWarning("Stopping consul key value watch tasks...");
 
             this.ct.Cancel();
 
@@ -64,7 +52,7 @@
 
             this.ct.Dispose();
 
-            this.log.Warning("Consul key value watcher is stopped.");
+            this.log.LogWarning("Consul key value watcher is stopped.");
         }
 
         private async Task<ulong> SetInitialValueAsync(string key, Action<QueryResult<KVPair>> updateSettingWith)
@@ -75,12 +63,12 @@
 
                 if (result.Response != null)
                 {
-                    this.log.Info("Successfuly retrieved initial value from consul.", () => new { Key = key, Value = result.GetString() });
+                    this.log.LogInformation("Successfuly retrieved initial value {value} from consul for key {key}.", result.GetString(), key);
                     updateSettingWith(result);
                 }
                 else
                 {
-                    this.log.Warning("Key doesn't exist in consul. Action will be executed when the key is created.", () => new { Key = key });
+                    this.log.LogWarning("Key {key} doesn't exist in consul. Action will be executed when the key is created.", key);
                 }
 
                 return result.LastIndex;
@@ -93,7 +81,7 @@
 
         private void StartWatching(string key, ulong lastIndex, Action<QueryResult<KVPair>> updateSettingWith)
         {
-            this.tasks.Add(Task.Factory.StartNew(
+            this.tasks.Add(Task.Run(
                 async () =>
                 {
                     while (true)
@@ -105,9 +93,7 @@
                                 break;
                             }
 
-                            this.log.Info(
-                                "Executing blocking query to kv get endpoint.",
-                                () => new { Key = key, TimeoutMilliseconds = this.configuration.BlockingQueryTimeout.TotalMilliseconds });
+                            this.log.LogInformation("Executing blocking query to kv get endpoint for key {key}. Waiting at most {BlockingQueryTimeout}ms.", key, this.configuration.BlockingQueryTimeout.TotalMilliseconds);
 
                             var result = await this.keyValueEndpoint.Get(
                                 key,
@@ -116,7 +102,7 @@
 
                             if (result.LastIndex != lastIndex && !this.ct.IsCancellationRequested)
                             {
-                                this.log.Info("A new value was returned.", () => new { Key = key, Value = result.GetString() });
+                                this.log.LogInformation("A new value for key {key} was returned: {value}", key, result.GetString());
 
                                 updateSettingWith(result);
 
@@ -130,19 +116,15 @@
                                 break;
                             }
 
-                            this.log.Error(
-                                "Blocking query to kv get endpoint failed. Waiting until next query.",
-                                () => new
-                                {
-                                    Exception = ex.ToString(),
-                                    DelayMilliseconds = this.configuration.DelayBetweenFailedRequests.TotalMilliseconds
-                                });
+                            this.log.LogError(
+                                ex,
+                                "Blocking query to kv get endpoint failed. Waiting {DelayBetweenFailedRequests}ms until next query.",
+                                this.configuration.DelayBetweenFailedRequests.TotalMilliseconds);
 
                             await Task.Delay(this.configuration.DelayBetweenFailedRequests, this.ct.Token);
                         }
                     }
-                },
-                TaskCreationOptions.LongRunning));
+                }));
         }
     }
 }
