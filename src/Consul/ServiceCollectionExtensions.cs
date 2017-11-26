@@ -4,6 +4,7 @@
     using global::Consul;
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Logging;
     using PetProjects.Framework.Consul.Client;
     using PetProjects.Framework.Consul.Store;
     using PetProjects.Framework.Consul.Watcher;
@@ -46,8 +47,27 @@
 
             collection.AddSingleton<IStoreConfiguration>(consulStoreConfig);
             collection.AddTransient<IConsulClientFactory, ConsulClientFactory>();
-            collection.AddSingleton<IKVEndpoint>(sp => sp.GetRequiredService<IConsulClientFactory>().Create(sp.GetRequiredService<IConsulClientConfiguration>()).KV);
-            collection.AddTransient<IKeyValueWatcher, ConsulKeyValueWatcher>();
+            collection.AddSingleton<IKVEndpoint>(sp =>
+            {
+                try
+                {
+                    return sp.GetRequiredService<IConsulClientFactory>().Create(sp.GetRequiredService<IConsulClientConfiguration>()).KV;
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
+            });
+            collection.AddTransient<IKeyValueWatcher>(sp =>
+            {
+                var kvEndpoint = sp.GetRequiredService<IKVEndpoint>();
+                if (kvEndpoint == null)
+                {
+                    return new NullKeyValueWatcher();
+                }
+
+                return new ConsulKeyValueWatcher(kvEndpoint, sp.GetRequiredService<IWatcherConfiguration>(), sp.GetRequiredService<ILogger>());
+            });
             collection.AddSingleton<IStringKeyValueStore, ConsulStringKeyValueStore>();
         }
     }
