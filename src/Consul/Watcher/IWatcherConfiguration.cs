@@ -10,5 +10,7 @@
         /// This timeout must be higher than consul client's timeout.
         /// </summary>
         TimeSpan BlockingQueryTimeout { get; }
+
+        bool CreateKeyValues { get; }
     }
 }

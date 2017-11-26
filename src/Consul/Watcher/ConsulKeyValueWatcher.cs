@@ -2,10 +2,12 @@
 {
     using System;
     using System.Collections.Concurrent;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using global::Consul;
     using Microsoft.Extensions.Logging;
+    using Newtonsoft.Json;
 
     public class ConsulKeyValueWatcher : IKeyValueWatcher
     {
@@ -23,17 +25,17 @@
             this.log = log;
         }
 
-        public async Task<IKeyValueWatcher> WatchAsync<T>(string key, Action<T> updateSettingWith)
+        public async Task<IKeyValueWatcher> WatchAsync<T>(string key, T defaultValue, Action<T> updateSettingWith)
         {
-            var lastIndex = await this.SetInitialValueAsync(key, result => updateSettingWith(result.GetDeserializedValue<T>())).ConfigureAwait(false);
+            var lastIndex = await this.SetInitialValueAsync(key, JsonConvert.SerializeObject(defaultValue), result => updateSettingWith(result.GetDeserializedValue<T>())).ConfigureAwait(false);
             this.StartWatching(key, lastIndex, result => updateSettingWith(result.GetDeserializedValue<T>()));
 
             return this;
         }
 
-        public async Task<IKeyValueWatcher> WatchStringAsync(string key, Action<string> updateSettingWith)
+        public async Task<IKeyValueWatcher> WatchStringAsync(string key, string defaultValue, Action<string> updateSettingWith)
         {
-            var lastIndex = await this.SetInitialValueAsync(key, result => updateSettingWith(result.GetString())).ConfigureAwait(false);
+            var lastIndex = await this.SetInitialValueAsync(key, defaultValue, result => updateSettingWith(result.GetString())).ConfigureAwait(false);
             this.StartWatching(key, lastIndex, result => updateSettingWith(result.GetString()));
 
             return this;
@@ -55,7 +57,7 @@
             this.log.LogWarning("Consul key value watcher is stopped.");
         }
 
-        private async Task<ulong> SetInitialValueAsync(string key, Action<QueryResult<KVPair>> updateSettingWith)
+        private async Task<ulong> SetInitialValueAsync(string key, string defaultValue, Action<QueryResult<KVPair>> updateSettingWith)
         {
             try
             {
@@ -68,7 +70,21 @@
                 }
                 else
                 {
-                    this.log.LogWarning("Key {key} doesn't exist in consul. Action will be executed when the key is created.", key);
+                    this.log.LogWarning("Key {key} doesn't exist in consul. Adding it to consul kv store with value {value}", key, defaultValue);
+                    var putResponse = await this.keyValueEndpoint.Put(new KVPair(key) { Value = Encoding.UTF8.GetBytes(defaultValue) }).ConfigureAwait(false);
+
+                    if (!putResponse.Response)
+                    {
+                        this.log.LogError("Couldn't put initial value {value} of key {key} into consul kv store.", key, defaultValue);
+                    }
+
+                    result = await this.keyValueEndpoint.Get(key, new QueryOptions()).ConfigureAwait(false);
+
+                    if (result.Response != null)
+                    {
+                        this.log.LogInformation("Successfuly retrieved initial value {value} from consul for key {key} after writing the initial value.", result.GetString(), key);
+                        updateSettingWith(result);
+                    }
                 }
 
                 return result.LastIndex;

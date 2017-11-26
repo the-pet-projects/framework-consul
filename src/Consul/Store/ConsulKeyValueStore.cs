@@ -42,7 +42,7 @@
 
         protected virtual Task WatchKeyValueAsync(KeyValuePair<string, T> kv)
         {
-            return this.Watcher.WatchAsync<T>(kv.Key, updatedValue => this.KeyValueStore.AddOrUpdate(kv.Key, updatedValue, (_, __) => updatedValue));
+            return this.Watcher.WatchAsync<T>(kv.Key, kv.Value, updatedValue => this.KeyValueStore.AddOrUpdate(kv.Key, updatedValue, (_, __) => updatedValue));
         }
 
         private string PrependKeyPrefix(string key)

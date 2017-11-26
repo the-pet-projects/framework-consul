@@ -17,7 +17,7 @@
 
         protected override Task WatchKeyValueAsync(KeyValuePair<string, string> kv)
         {
-            return this.Watcher.WatchStringAsync(kv.Key, updatedValue => this.KeyValueStore.AddOrUpdate(kv.Key, updatedValue, (_, __) => updatedValue));
+            return this.Watcher.WatchStringAsync(kv.Key, kv.Value, updatedValue => this.KeyValueStore.AddOrUpdate(kv.Key, updatedValue, (_, __) => updatedValue));
         }
 
         public T GetAndConvertValue<T>(string key)
