@@ -60,7 +60,7 @@
             });
             collection.AddTransient<IKeyValueWatcher>(sp =>
             {
-                var kvEndpoint = sp.GetRequiredService<IKVEndpoint>();
+                var kvEndpoint = sp.GetService<IKVEndpoint>();
                 if (kvEndpoint == null)
                 {
                     return new NullKeyValueWatcher();
